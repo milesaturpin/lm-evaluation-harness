@@ -7,7 +7,7 @@ import lm_eval.tasks
 import lm_eval.base
 import numpy as np
 
-def simple_evaluate(model, model_args, task_names, num_fewshot=0, batch_size=None, device=None, no_cache=False, limit=None, bootstrap_iters=100000):
+def simple_evaluate(model, model_args, task_names, num_fewshot=0, batch_size=None, device=None, no_cache=False, reset_cache=False, limit=None, bootstrap_iters=100000):
     random.seed(1234)
     np.random.seed(1234)
 
@@ -16,7 +16,7 @@ def simple_evaluate(model, model_args, task_names, num_fewshot=0, batch_size=Non
     })
 
     if not no_cache:
-        lm = lm_eval.base.CachingLM(lm, 'lm_cache/' + model + '_' + model_args.replace('=', '-').replace(',', '_').replace('/', '-') + '.db')
+        lm = lm_eval.base.CachingLM(lm, 'lm_cache/' + model + '_' + model_args.replace('=', '-').replace(',', '_').replace('/', '-') + '.db', reset_cache)
     
     task_dict = lm_eval.tasks.get_task_dict(task_names)
     results = evaluate(lm, task_dict, False, num_fewshot, limit)
@@ -29,6 +29,7 @@ def simple_evaluate(model, model_args, task_names, num_fewshot=0, batch_size=Non
         "batch_size": batch_size,
         "device": device,
         "no_cache": no_cache,
+        "reset_cache": reset_cache,
         "limit": limit,
         "bootstrap_iters": bootstrap_iters
     }
@@ -55,6 +56,7 @@ def evaluate(lm, task_dict, provide_description, num_fewshot, limit, bootstrap_i
 
     # TODO: we need unit tests & sanity checks or something to ensure that the return of `validation_docs` is stable
 
+    # doc - a dictionary containing sentence, label, idx
     docs = {}
 
     # get lists of each type of requeste
@@ -101,23 +103,36 @@ def evaluate(lm, task_dict, provide_description, num_fewshot, limit, bootstrap_i
         # solution. we could also implement some kind of autogrouping here; they should end up next to each other.
 
         print("Running", reqtype, "requests")
+        # This is where the computation happens, there are separate requests for each multiple choice label
         resps = getattr(lm, reqtype)([req.args for req in reqs])
 
+        """
+        i get the error `TypeError: 'NoneType' object is not subscriptable` when i havent returned
+        a result for all the non cached responses that i was supposed to... 
+        TODO: figure out how to get around this
+        """
         resps = [x if req.index is None else x[req.index] for x, req in zip(resps, reqs)]
 
+        # HERE is the grouping by same input for eg multiple choice tasks... appends if is the same task_name, when was each label example created?
         for resp, (i, task_name, doc, doc_id) in zip(resps, requests_origin[reqtype]):
+            # resp is just 1 number? but doc contains all choices? ok so I think i denotes the choice being evaluated
+            # process_res_queue items look like [(('hellaswag', 0), [(0, -1.5497323), (1, -1.3579773), (2, -0.19334538), (3, -1.0002891)])
             process_res_queue[(task_name, doc_id)].append((i, resp))
     
     vals = collections.defaultdict(list)
 
     # unpack results and sort back in order and return control to Task
     for (task_name, doc_id), requests in process_res_queue.items():
+        # requests here is the list of results [(0, -1.5497323), (1, -1.3579773), (2, -0.19334538), (3, -1.0002891)]
+        # sort by choice index
         requests.sort(key=lambda x: x[0])
         requests = [x[1] for x in requests]
 
         task = task_dict[task_name]
         doc = docs[(task_name, doc_id)]
 
+        # Requests here is the list of logits for each label, doc contains the index of true label
+        # e.g. task might be multiple choice task and computes the metrics
         metrics = task.process_results(doc, requests)
         for metric, value in metrics.items():
             vals[(task_name, metric)].append(value)
@@ -125,6 +140,7 @@ def evaluate(lm, task_dict, provide_description, num_fewshot, limit, bootstrap_i
     # aggregate results
     for (task_name, metric), items in vals.items():
         task = task_dict[task_name]
+        # e.g. pass a list of 1's and 0's to compute mean acc and acc_norm
         results[task_name][metric] = task.aggregation()[metric](items)
 
         # hotfix: bleu, chrf, ter seem to be really expensive to bootstrap

@@ -382,9 +382,10 @@ class CacheHook:
 
 
 class CachingLM:
-    def __init__(self, lm, cache_db):
+    def __init__(self, lm, cache_db, reset_cache=False):
         self.lm = lm
         self.cache_db = cache_db
+        self.reset_cache = reset_cache
         if os.path.dirname(cache_db): os.makedirs(os.path.dirname(cache_db), exist_ok=True)
         self.dbdict = SqliteDict(cache_db, autocommit=True)
 
@@ -399,7 +400,8 @@ class CachingLM:
             # figure out which ones are cached and which ones are new
             for req in requests:
                 hsh = hash_args(attr, req)
-                if hsh in self.dbdict:
+                # if reset_cache is on then we ignore whether or not an example has prev been computed
+                if hsh in self.dbdict and not self.reset_cache:
                     ob = self.dbdict[hsh]
 
                     assert ob is not None
@@ -415,6 +417,8 @@ class CachingLM:
             # stick the new ones back into the list and also cache any of the new ones
             resptr = 0
             for req, r in zip(remaining_reqs, rem_res):
+                # remaining_reqs and rem_res only have the results for non-cached queries, need to find right index in the overall example list
+                # res contains all examples, so only add the results to the empty entries, computing the index
                 while res[resptr] is not None: resptr += 1
 
                 res[resptr] = r

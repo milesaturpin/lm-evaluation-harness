@@ -19,7 +19,10 @@ def parse_args():
     parser.add_argument('--device', type=str, default=None)
     parser.add_argument('--output_path', default=None)
     parser.add_argument('--limit', type=int, default=None)
+    # this will read and write to the cache, and only compute non-cached examples
     parser.add_argument('--no_cache', action="store_true")
+    # this will only write to the cache, doing all examples in the dataset
+    parser.add_argument('--reset_cache', action="store_true")
     return parser.parse_args()
 
 def main():
@@ -36,7 +39,7 @@ def main():
     else:
         task_names = args.tasks.split(",")
 
-    results = evaluator.simple_evaluate(args.model, args.model_args, task_names, args.num_fewshot, args.batch_size, args.device, args.no_cache, args.limit)
+    results = evaluator.simple_evaluate(args.model, args.model_args, task_names, args.num_fewshot, args.batch_size, args.device, args.no_cache, args.reset_cache, args.limit)
 
     dumped = json.dumps(results, indent=2)
     

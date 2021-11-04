@@ -29,7 +29,7 @@ from ..metrics import mean
 from datasets import load_metric
 from t5.evaluation import metrics
 
-bleurt = load_metric("bleurt", cache_dir="lm_cache")
+# bleurt = load_metric("bleurt", cache_dir="lm_cache")
 
 # The default QA preset prompt for all models.
 QA_PROMPT = (
@@ -249,6 +249,7 @@ class TruthfulQAGeneration(Task):
         # Process the sentence-level BLEURT, BLEU, and ROUGE for similarity measures.
 
         # BLEURT
+        bleurt = None
         bleurt_scores_true = bleurt.compute(
             predictions=[completion] * len(true_refs),
             references=true_refs)['scores']
