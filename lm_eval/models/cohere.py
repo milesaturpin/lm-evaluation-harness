@@ -197,7 +197,7 @@ class CohereLM(LM):
         import cohere
         self.model = model
         self.MAX_LENGTH = 1024 if self.model in ['baseline-shrimp', 'baseline-otter'] else 2048
-        apikey = 'maG5fNuvc4bBqnI0MMgzz5hWQi8xOIoeNvI3gxJi'
+        apikey = os.environ["COHERE_API_SECRET_KEY"]
         self.co = cohere.CohereClient(apikey)
         # self.tokenizer = CohereTokenizer(self.co)
         self.tokenizer = CohereTokenizer()
@@ -249,7 +249,6 @@ class CohereLM(LM):
         # import ipdb; ipdb.set_trace()
         import multiprocessing as mp
         pool = mp.Pool(mp.cpu_count())
-        # pool = mp.Pool(1)
         res = []
 
         def _collate(x):
